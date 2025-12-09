@@ -1120,162 +1120,199 @@ hacluster_instance(pmInDom indom, int inst, char *name, pmInResult **result, pmd
 static int
 hacluster_fetch_refresh(pmdaExt *pmda, int *need_refresh)
 {
-	struct pacemaker_fail			*fail;
-	struct pacemaker_constraints	*constraints;
-	struct pacemaker_nodes			*pace_nodes;
-	struct pacemaker_node_attrib	*node_attribs;
-	struct pacemaker_resources		*pace_resources;
-	struct corosync_node			*node;
-	struct corosync_ring			*ring;
-	struct sbd_device				*sbd;
-	struct drbd_resource			*resource;
-	struct drbd_peer_device			*peer;
-	char 							*node_name, *ring_name, *sbd_dev, *resource_name, *peer_device; 
-	char							*instance_name, *constraint_name, *pace_node_name, *attrib_name;
-	char							*pace_resource_name;
-	int 							i, sts;
-		
-	if ((sts = hacluster_pacemaker_fail_instance_refresh()) < 0)
-		return sts;
-		
-	if ((sts = hacluster_pacemaker_constraints_instance_refresh()) < 0)
-		return sts;
-		
-	if ((sts = hacluster_pacemaker_nodes_instance_refresh()) < 0)
-		return sts;
-		
-	if ((sts = hacluster_pacemaker_node_attrib_instance_refresh()) < 0)
-		return sts;
-		
-	if ((sts = hacluster_pacemaker_resources_instance_refresh()) < 0)
-		return sts;
-		
-	if ((sts = hacluster_corosync_node_instance_refresh()) < 0)
-		return sts;
-		
-	if ((sts = hacluster_corosync_ring_instance_refresh()) < 0)
-		return sts;
-		
-	if ((sts = hacluster_sbd_device_instance_refresh()) < 0)
-		return sts;
-		
-	if ((sts = hacluster_drbd_resource_instance_refresh()) < 0)
-		return sts;
-		
-	if ((sts = hacluster_drbd_peer_device_instance_refresh()) < 0)
-		return sts;	
+	int i, sts;
 
 	if (need_refresh[CLUSTER_PACEMAKER_GLOBAL])
 		hacluster_refresh_pacemaker_global();
-		
-	for (pmdaCacheOp(INDOM(PACEMAKER_FAIL_INDOM), PMDA_CACHE_WALK_REWIND);;) {
-		if ((i= pmdaCacheOp(INDOM(PACEMAKER_FAIL_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
-			break;
-		if (!pmdaCacheLookup(INDOM(PACEMAKER_FAIL_INDOM), i, &instance_name, (void **)&fail) || !fail)
-			continue;
 
-		if (need_refresh[CLUSTER_PACEMAKER_FAIL])
-			hacluster_refresh_pacemaker_fail(instance_name, &fail->fail_count);
-	}
+	if (need_refresh[CLUSTER_PACEMAKER_FAIL]) {
+		struct pacemaker_fail *fail;
+		char *instance_name;
 	
-	for (pmdaCacheOp(INDOM(PACEMAKER_CONSTRAINTS_INDOM), PMDA_CACHE_WALK_REWIND);;) {
-		if ((i= pmdaCacheOp(INDOM(PACEMAKER_CONSTRAINTS_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
-			break;
-		if (!pmdaCacheLookup(INDOM(PACEMAKER_CONSTRAINTS_INDOM), i, &constraint_name, (void **)&constraints) || !constraints)
-			continue;
+		if ((sts = hacluster_pacemaker_fail_instance_refresh()) < 0)
+			return sts;
 
-		if (need_refresh[CLUSTER_PACEMAKER_CONSTRAINTS] ||
-			need_refresh[CLUSTER_PACEMAKER_CONSTRAINTS_ALL])
-			hacluster_refresh_pacemaker_constraints(constraint_name, &constraints->location_constraints);
-	}
-	
-	for (pmdaCacheOp(INDOM(PACEMAKER_NODES_INDOM), PMDA_CACHE_WALK_REWIND);;) {
-		if ((i= pmdaCacheOp(INDOM(PACEMAKER_NODES_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
-			break;
-		if (!pmdaCacheLookup(INDOM(PACEMAKER_NODES_INDOM), i, &pace_node_name, (void **)&pace_nodes) || !pace_nodes)
-			continue;
+		for (pmdaCacheOp(INDOM(PACEMAKER_FAIL_INDOM), PMDA_CACHE_WALK_REWIND);;) {
+			if ((i= pmdaCacheOp(INDOM(PACEMAKER_FAIL_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
+				break;
+			if (!pmdaCacheLookup(INDOM(PACEMAKER_FAIL_INDOM), i, &instance_name, (void **)&fail) || !fail)
+				continue;
 
-		if (need_refresh[CLUSTER_PACEMAKER_NODES])
-			hacluster_refresh_pacemaker_nodes(pace_node_name, &pace_nodes->nodes);
-	}
-	
-	for (pmdaCacheOp(INDOM(PACEMAKER_NODE_ATTRIB_INDOM), PMDA_CACHE_WALK_REWIND);;) {
-		if ((i= pmdaCacheOp(INDOM(PACEMAKER_NODE_ATTRIB_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
-			break;
-		if (!pmdaCacheLookup(INDOM(PACEMAKER_NODE_ATTRIB_INDOM), i, &attrib_name, (void **)&node_attribs) || !node_attribs)
-			continue;
-
-		if (need_refresh[CLUSTER_PACEMAKER_NODE_ATTRIB] ||
-			need_refresh[CLUSTER_PACEMAKER_NODE_ATTRIB_ALL])
-			hacluster_refresh_pacemaker_node_attribs(attrib_name, &node_attribs->attributes);
-	}
-	
-	for (pmdaCacheOp(INDOM(PACEMAKER_RESOURCES_INDOM), PMDA_CACHE_WALK_REWIND);;) {
-		if ((i= pmdaCacheOp(INDOM(PACEMAKER_RESOURCES_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
-			break;
-		if (!pmdaCacheLookup(INDOM(PACEMAKER_RESOURCES_INDOM), i, &pace_resource_name, (void **)&pace_resources) || !pace_resources)
-			continue;
-
-		if (need_refresh[CLUSTER_PACEMAKER_RESOURCES] ||
-			need_refresh[CLUSTER_PACEMAKER_RESOURCES_ALL])
-			hacluster_refresh_pacemaker_resources(pace_resource_name, &pace_resources->resources);
+			if (need_refresh[CLUSTER_PACEMAKER_FAIL])
+				hacluster_refresh_pacemaker_fail(instance_name, &fail->fail_count);
+		}
 	}
 
-	for (pmdaCacheOp(INDOM(COROSYNC_NODE_INDOM), PMDA_CACHE_WALK_REWIND);;) {
-		if ((i= pmdaCacheOp(INDOM(COROSYNC_NODE_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
-			break;
-		if (!pmdaCacheLookup(INDOM(COROSYNC_NODE_INDOM), i, &node_name, (void **)&node) || !node)
-			continue;
+	if ((need_refresh[CLUSTER_PACEMAKER_CONSTRAINTS] || need_refresh[CLUSTER_PACEMAKER_CONSTRAINTS_ALL])) {
+		struct pacemaker_constraints	*constraints;
+		char *constraint_name;
 
-		if (need_refresh[CLUSTER_COROSYNC_NODE])
-			hacluster_refresh_corosync_node(node_name, &node->member_votes);
+		if ((sts = hacluster_pacemaker_constraints_instance_refresh()) < 0)
+			return sts;
+
+		for (pmdaCacheOp(INDOM(PACEMAKER_CONSTRAINTS_INDOM), PMDA_CACHE_WALK_REWIND);;) {
+			if ((i= pmdaCacheOp(INDOM(PACEMAKER_CONSTRAINTS_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
+				break;
+			if (!pmdaCacheLookup(INDOM(PACEMAKER_CONSTRAINTS_INDOM), i, &constraint_name, (void **)&constraints) || !constraints)
+				continue;
+
+			if (need_refresh[CLUSTER_PACEMAKER_CONSTRAINTS] ||
+			    need_refresh[CLUSTER_PACEMAKER_CONSTRAINTS_ALL])
+				hacluster_refresh_pacemaker_constraints(constraint_name, &constraints->location_constraints);
+		}
 	}
-	
+
+	if (need_refresh[CLUSTER_PACEMAKER_NODES]) {
+		struct pacemaker_nodes *pace_nodes;
+		char *pace_node_name;
+
+		if ((sts = hacluster_pacemaker_nodes_instance_refresh()) < 0)
+			return sts;
+
+		for (pmdaCacheOp(INDOM(PACEMAKER_NODES_INDOM), PMDA_CACHE_WALK_REWIND);;) {
+			if ((i= pmdaCacheOp(INDOM(PACEMAKER_NODES_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
+				break;
+			if (!pmdaCacheLookup(INDOM(PACEMAKER_NODES_INDOM), i, &pace_node_name, (void **)&pace_nodes) || !pace_nodes)
+				continue;
+
+			if (need_refresh[CLUSTER_PACEMAKER_NODES])
+				hacluster_refresh_pacemaker_nodes(pace_node_name, &pace_nodes->nodes);
+		}
+	}
+
+	if ((need_refresh[CLUSTER_PACEMAKER_NODE_ATTRIB] || need_refresh[CLUSTER_PACEMAKER_NODE_ATTRIB_ALL])) {
+		struct pacemaker_node_attrib *node_attribs;
+		char *attrib_name;
+
+		if ((sts = hacluster_pacemaker_node_attrib_instance_refresh()) < 0)
+			return sts;
+
+		for (pmdaCacheOp(INDOM(PACEMAKER_NODE_ATTRIB_INDOM), PMDA_CACHE_WALK_REWIND);;) {
+			if ((i= pmdaCacheOp(INDOM(PACEMAKER_NODE_ATTRIB_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
+				break;
+			if (!pmdaCacheLookup(INDOM(PACEMAKER_NODE_ATTRIB_INDOM), i, &attrib_name, (void **)&node_attribs) || !node_attribs)
+				continue;
+
+			if (need_refresh[CLUSTER_PACEMAKER_NODE_ATTRIB] ||
+			    need_refresh[CLUSTER_PACEMAKER_NODE_ATTRIB_ALL])
+				hacluster_refresh_pacemaker_node_attribs(attrib_name, &node_attribs->attributes);
+		}
+	}
+
+	if ((need_refresh[CLUSTER_PACEMAKER_RESOURCES] || need_refresh[CLUSTER_PACEMAKER_RESOURCES_ALL])) {
+		struct pacemaker_resources *pace_resources;
+		char *pace_resource_name;
+
+		if ((sts = hacluster_pacemaker_resources_instance_refresh()) < 0)
+			return sts;
+
+		for (pmdaCacheOp(INDOM(PACEMAKER_RESOURCES_INDOM), PMDA_CACHE_WALK_REWIND);;) {
+			if ((i= pmdaCacheOp(INDOM(PACEMAKER_RESOURCES_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
+				break;
+			if (!pmdaCacheLookup(INDOM(PACEMAKER_RESOURCES_INDOM), i, &pace_resource_name, (void **)&pace_resources) || !pace_resources)
+				continue;
+
+			if (need_refresh[CLUSTER_PACEMAKER_RESOURCES] ||
+		   	    need_refresh[CLUSTER_PACEMAKER_RESOURCES_ALL])
+				hacluster_refresh_pacemaker_resources(pace_resource_name, &pace_resources->resources);
+		}
+	}
+
+	if (need_refresh[CLUSTER_COROSYNC_NODE]) {
+		struct corosync_node *node;
+		char *node_name;
+
+		if ((sts = hacluster_corosync_node_instance_refresh()) < 0)
+			return sts;
+
+		for (pmdaCacheOp(INDOM(COROSYNC_NODE_INDOM), PMDA_CACHE_WALK_REWIND);;) {
+			if ((i= pmdaCacheOp(INDOM(COROSYNC_NODE_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
+				break;
+			if (!pmdaCacheLookup(INDOM(COROSYNC_NODE_INDOM), i, &node_name, (void **)&node) || !node)
+				continue;
+
+			if (need_refresh[CLUSTER_COROSYNC_NODE])
+				hacluster_refresh_corosync_node(node_name, &node->member_votes);
+		}
+	}
+
 	if (need_refresh[CLUSTER_COROSYNC_GLOBAL])
 		hacluster_refresh_corosync_global();
-		
-	for (pmdaCacheOp(INDOM(COROSYNC_RING_INDOM), PMDA_CACHE_WALK_REWIND);;) {
-		if ((i= pmdaCacheOp(INDOM(COROSYNC_RING_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
-			break;
-		if (!pmdaCacheLookup(INDOM(COROSYNC_RING_INDOM), i, &ring_name, (void **)&ring) || !ring)
-			continue;
 
-		if (need_refresh[CLUSTER_COROSYNC_RING] ||
-			need_refresh[CLUSTER_COROSYNC_RING_ALL])
-			hacluster_refresh_corosync_ring(ring_name, &ring->rings);
+	if ((need_refresh[CLUSTER_COROSYNC_RING] || need_refresh[CLUSTER_COROSYNC_RING_ALL])) {
+		struct corosync_ring *ring;
+		char *ring_name;
+
+		if ((sts = hacluster_corosync_ring_instance_refresh()) < 0)
+			return sts;
+
+		for (pmdaCacheOp(INDOM(COROSYNC_RING_INDOM), PMDA_CACHE_WALK_REWIND);;) {
+			if ((i= pmdaCacheOp(INDOM(COROSYNC_RING_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
+				break;
+			if (!pmdaCacheLookup(INDOM(COROSYNC_RING_INDOM), i, &ring_name, (void **)&ring) || !ring)
+				continue;
+
+			if (need_refresh[CLUSTER_COROSYNC_RING] ||
+			    need_refresh[CLUSTER_COROSYNC_RING_ALL])
+				hacluster_refresh_corosync_ring(ring_name, &ring->rings);
+		}
 	}
-	
-	for (pmdaCacheOp(INDOM(SBD_DEVICE_INDOM), PMDA_CACHE_WALK_REWIND);;) {
-		if ((i= pmdaCacheOp(INDOM(SBD_DEVICE_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
-			break;
-		if (!pmdaCacheLookup(INDOM(SBD_DEVICE_INDOM), i, &sbd_dev, (void **)&sbd) || !sbd)
-			continue;
 
-		if (need_refresh[CLUSTER_SBD_DEVICE] ||
-			need_refresh[CLUSTER_SBD_DEVICE_ALL])
-			hacluster_refresh_sbd_device(sbd_dev, &sbd->sbd);
+	if ((need_refresh[CLUSTER_SBD_DEVICE] || need_refresh[CLUSTER_SBD_DEVICE_ALL])) {
+		struct sbd_device *sbd;
+		char *sbd_dev;
+
+		if ((sts = hacluster_sbd_device_instance_refresh()) < 0)
+			return sts;
+
+		for (pmdaCacheOp(INDOM(SBD_DEVICE_INDOM), PMDA_CACHE_WALK_REWIND);;) {
+			if ((i= pmdaCacheOp(INDOM(SBD_DEVICE_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
+				break;
+			if (!pmdaCacheLookup(INDOM(SBD_DEVICE_INDOM), i, &sbd_dev, (void **)&sbd) || !sbd)
+				continue;
+
+			if (need_refresh[CLUSTER_SBD_DEVICE] ||
+			    need_refresh[CLUSTER_SBD_DEVICE_ALL])
+				hacluster_refresh_sbd_device(sbd_dev, &sbd->sbd);
+		}
 	}
-	
-	for (pmdaCacheOp(INDOM(DRBD_RESOURCE_INDOM), PMDA_CACHE_WALK_REWIND);;) {
-		if ((i= pmdaCacheOp(INDOM(DRBD_RESOURCE_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
-			break;
-		if (!pmdaCacheLookup(INDOM(DRBD_RESOURCE_INDOM), i, &resource_name, (void **)&resource) || !resource)
-			continue;
 
-		if (need_refresh[CLUSTER_DRBD_RESOURCE] ||
-			need_refresh[CLUSTER_DRBD_RESOURCE_ALL])
-			hacluster_refresh_drbd_resource(resource_name, &resource->resource);
+	if ((need_refresh[CLUSTER_DRBD_RESOURCE] || need_refresh[CLUSTER_DRBD_RESOURCE_ALL])) {
+		struct drbd_resource *resource;
+		char *resource_name;
+
+		if ((sts = hacluster_drbd_resource_instance_refresh()) < 0)
+			return sts;
+
+		for (pmdaCacheOp(INDOM(DRBD_RESOURCE_INDOM), PMDA_CACHE_WALK_REWIND);;) {
+			if ((i= pmdaCacheOp(INDOM(DRBD_RESOURCE_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
+				break;
+			if (!pmdaCacheLookup(INDOM(DRBD_RESOURCE_INDOM), i, &resource_name, (void **)&resource) || !resource)
+				continue;
+
+			if (need_refresh[CLUSTER_DRBD_RESOURCE] ||
+			    need_refresh[CLUSTER_DRBD_RESOURCE_ALL])
+				hacluster_refresh_drbd_resource(resource_name, &resource->resource);
+		}
 	}
-	
-	for (pmdaCacheOp(INDOM(DRBD_PEER_DEVICE_INDOM), PMDA_CACHE_WALK_REWIND);;) {
-		if ((i= pmdaCacheOp(INDOM(DRBD_PEER_DEVICE_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
-			break;
-		if (!pmdaCacheLookup(INDOM(DRBD_PEER_DEVICE_INDOM), i, &peer_device, (void **)&peer) || !peer)
-			continue;
 
-		if (need_refresh[CLUSTER_DRBD_PEER_DEVICE] ||
-			need_refresh[CLUSTER_DRBD_PEER_DEVICE_ALL])
-			hacluster_refresh_drbd_peer_device(peer_device, &peer->peer_device);
+	if ((need_refresh[CLUSTER_DRBD_PEER_DEVICE] || need_refresh[CLUSTER_DRBD_PEER_DEVICE_ALL])) {
+		struct drbd_peer_device *peer;
+		char *peer_device; 
+
+		if ((sts = hacluster_drbd_peer_device_instance_refresh()) < 0)
+			return sts;
+
+		for (pmdaCacheOp(INDOM(DRBD_PEER_DEVICE_INDOM), PMDA_CACHE_WALK_REWIND);;) {
+			if ((i= pmdaCacheOp(INDOM(DRBD_PEER_DEVICE_INDOM), PMDA_CACHE_WALK_NEXT)) < 0)
+				break;
+			if (!pmdaCacheLookup(INDOM(DRBD_PEER_DEVICE_INDOM), i, &peer_device, (void **)&peer) || !peer)
+				continue;
+
+			if (need_refresh[CLUSTER_DRBD_PEER_DEVICE] ||
+		   	    need_refresh[CLUSTER_DRBD_PEER_DEVICE_ALL])
+				hacluster_refresh_drbd_peer_device(peer_device, &peer->peer_device);
+		}
 	}
 	
 	return sts;
